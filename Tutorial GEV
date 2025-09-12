@@ -139,7 +139,7 @@ prec_max_anual <- MACAE2 |>
 # Justificativa: 
 # - Facilita a identificação visual de eventos extremos.
 
-grafico_maximos <- ggplot(MACAE2, aes(x = Data, y = Prec)) +
+ggplot(MACAE2, aes(x = Data, y = Prec)) +
   geom_line(color = "#386e9f") +  # Linha representando a precipitação diária.
   
   geom_point(data = prec_max_anual, 
@@ -167,8 +167,6 @@ grafico_maximos <- ggplot(MACAE2, aes(x = Data, y = Prec)) +
     axis.text.x = element_text(angle = 45, hjust = 1),
     plot.title = element_text(face = "bold", hjust = 0)
   )
-
-print(grafico_maximos)
 
 #------------------------------------------------------------------------------#
 # 7. Teste de Aleatoriedade
