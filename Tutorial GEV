@@ -116,7 +116,7 @@ percentual_na(MACAE2$Prec)        # Aplica a função à variável de precipita�
 
 
 #------------------------------------------------------------------------------#
-# 5. Identificação dos Máximos Anuais
+# 5. Identificação e Visualização dos Máximos Anuais
 
 # Objetivo: 
 # - Extrair, para cada ano, o dia com o maior valor de precipitação registrado.
@@ -125,19 +125,13 @@ percentual_na(MACAE2$Prec)        # Aplica a função à variável de precipita�
 # - Base para análise de extremos.
 
 prec_max_anual <- MACAE2 |>
-  group_by(Ano) |>                                 # Agrupa os dados por ano.
+  group_by(Ano) |>                                         # Agrupa os dados por ano.
   slice_max(order_by = Prec, n = 1, with_ties = FALSE) |>  # Seleciona o maior valor de precipitação por ano.
-  ungroup() |>                                     # Remove o agrupamento.
+  ungroup() |>                                             # Remove o agrupamento.
   print()
 
-#------------------------------------------------------------------------------#
-# 6. Visualização dos Máximos
-
-# Objetivo: 
+# Visualização dos Máximos:
 # - Mostrar a série completa e destacar os máximos anuais.
-
-# Justificativa: 
-# - Facilita a identificação visual de eventos extremos.
 
 ggplot(MACAE2, aes(x = Data, y = Prec)) +
   geom_line(color = "#386e9f") +  # Linha representando a precipitação diária.
@@ -169,7 +163,7 @@ ggplot(MACAE2, aes(x = Data, y = Prec)) +
   )
 
 #------------------------------------------------------------------------------#
-# 7. Teste de Aleatoriedade
+# 6. Teste de Aleatoriedade
 
 # Objetivo: 
 # - Verificar se a sequência de máximos anuais de precipitação ocorre de forma 
@@ -189,7 +183,7 @@ runs.test(prec_max_anual$Prec)
 ## Se p-value ≤ 0,05 → rejeita-se H₀ → indício de dependência ou padrão não aleatório.
 
 #------------------------------------------------------------------------------#
-# 8. Autocorrelação
+# 7. Autocorrelação
 
 # Objetivo: 
 # - Avaliar a presença de dependência temporal entre os valores máximos anuais de precipitação.
@@ -209,7 +203,7 @@ acf(prec_max_anual$Prec)
 ## sazonalidade ou estrutura de dependência.
 
 #------------------------------------------------------------------------------#
-# 9. Ajuste do Modelo GEV
+# 8. Ajuste do Modelo GEV
 
 # Objetivo: 
 # - Ajustar a distribuição GEV aos máximos anuais de precipitação.
@@ -238,7 +232,7 @@ title(xlab = "Período de Retorno (anos)",
 plot(fitGEV, type = "qq", main = "", col = "red")
 
 #------------------------------------------------------------------------------#
-# 10. Estimativa dos Níveis de Retorno
+# 9. Estimativa dos Níveis de Retorno
 
 # Objetivo: 
 # - Estimar os valores máximos esperados de precipitação para diferentes períodos de retorno.
@@ -249,7 +243,7 @@ return.level(fitGEV, do.ci = FALSE,
              return.period = c(2, 5, 10, 25, 50, 100))
 
 #------------------------------------------------------------------------------#
-# 11. Teste de Adequação do Modelo
+# 10. Teste de Adequação do Modelo
 
 # Objetivo: 
 # - Verificar se o modelo GEV ajustado apresenta boa aderência aos dados observados.
