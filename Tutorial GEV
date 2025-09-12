@@ -114,7 +114,6 @@ percentual_na <- function(x) {
 
 percentual_na(MACAE2$Prec)        # Aplica a função à variável de precipitação.
 
-
 #------------------------------------------------------------------------------#
 # 5. Identificação dos Máximos Anuais
 
