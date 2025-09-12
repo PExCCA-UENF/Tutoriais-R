@@ -1,0 +1,296 @@
+#==============================================================================#
+#    PESQUISA E EXTENSÃO UNIVERSITÁRIA EM CIÊNCIAS CLIMÁTICAS E AMBIENTAIS     #
+#     TUTORIAL: IDENTIFICAÇÃO E MODELAGEM DE PRECIPITAÇÕES MÁXIMAS COM R       #
+#      ELABORAÇÃO: LYNDA SHÉRYLLIN CABOCLO VIANA E ELIANE BARBOSA SANTOS       #
+#                          Atualizado em 11/09/2025                            #
+#==============================================================================#
+
+# Este tutorial foi elaborado como produção técnica vinculada à dissertação    #
+# intitulada “Modelagem Estatística de Precipitações Máximas e sua Relação     #
+# com os Níveis da Lagoa Imboassica, Macaé-RJ”, desenvolvida pela mestranda    #
+# Lynda Shéryllin Caboclo Viana, sob orientação da Professora Eliane Barbosa   #
+# Santos, no âmbito do Programa de Pós-Graduação em Clima e Energia (PPGC&E)   #
+# da Universidade Estadual do Norte Fluminense Darcy Ribeiro (UENF).           #
+
+#==============================================================================#
+
+# O material tem como objetivo apresentar, de forma prática e reprodutível, as 
+# etapas de processamento, análise e modelagem estatística de séries temporais de 
+# precipitação máxima diária, com foco na aplicação da distribuição Generalizada 
+# de Valores Extremos (GEV).
+
+# A metodologia adotada envolve o processamento e análise de dados diários de 
+# precipitação da estação automática A608 do Instituto Nacional de Meteorologia (INMET).
+# As etapas incluem a identificação dos valores máximos anuais de precipitação e 
+# o ajuste da distribuição Generalizada de Valores Extremos (GEV), com o propósito 
+# de estimar os níveis de retorno para diferentes períodos, contribuindo para a 
+# compreensão da frequência e intensidade de eventos extremos.
+
+#------------------------------------------------------------------------------#
+# 1. Instalação e Carregamento de Pacotes
+
+# Objetivo: 
+# - Garantir que todos os pacotes necessários estejam instalados e carregados.
+
+# Pacotes necessários:
+# - tidyverse → manipulação, organização e visualização de dados.
+# - readr → importação de arquivos de texto.
+# - ggrepel → rótulos em gráficos.
+# - randtests → testes estatísticos de aleatoriedade.
+# - extRemes → modelagem estatística de valores extremos.
+# - TLMoments → cálculo de momentos-L.
+
+pacotes <- c("tidyverse", "readr", "ggrepel", "randtests", 
+             "extRemes", "TLMoments")
+
+for (p in pacotes) {
+  if (!require(p, character.only = TRUE)) {
+    install.packages(p, dependencies = TRUE)}
+  library(p, character.only = TRUE, quietly = TRUE)}
+
+#------------------------------------------------------------------------------#
+# 2. Importação dos Dados
+# -  A segunda etapa consiste na importação do conjunto de dados que servirá de 
+#    base para as análises propostas.
+
+# Fonte dos dados: 
+# - Os dados diários de precipitação foram obtidos do Banco de Dados Meteorológicos 
+#   do INMET. O arquivo está disponível no repositório do PExCCA-UENF no GitHub.
+
+url_dados <- 'https://raw.githubusercontent.com/PExCCA-UENF/Tutoriais-R/refs/heads/main/Dados/dados_A608_D_2006-09-21_2025-04-10.csv'
+
+MACAE <- readr::read_delim(url_dados, 
+                           skip = 10,           # Ignora as 10 primeiras linhas do arquivo.
+                           na = 'null',         # Define 'null' como valor ausente.
+                           delim = ';',         # Define ponto e vírgula como separador.
+                           col_names = TRUE,
+                           locale = locale(decimal_mark = ',') # Define vírgula como separador decimal.
+) |> 
+  dplyr::select(!ends_with('3')) |>             # Remove coluna irrelevante que termina com '3'.
+  dplyr::rename(Data = `Data Medicao`,          # Renomeia colunas para facilitar a análise.
+                Prec = `PRECIPITACAO TOTAL, DIARIO (AUT)(mm)`) |> 
+  print()
+
+#------------------------------------------------------------------------------#
+# 3. Criação de Referência Temporal Completa e Preenchimento de Lacunas
+
+# Objetivo: 
+# - Criar uma sequência contínua de datas para garantir a integridade da série temporal, 
+#   preenchendo eventuais lacunas nos registros diários.
+
+# Criação da referência temporal:
+Data.ref <- seq.Date(
+  from = min(MACAE$Data),
+  to = max(MACAE$Data),
+  by = "day")
+
+# Gera uma sequência diária de datas entre o menor e o maior valor presente na 
+# variável Data do conjunto original MACAE.
+
+# Preenchimento de lacunas e filtragem temporal:
+MACAE2 <- MACAE |>
+  full_join(data.frame(Data = Data.ref), by = "Data") |>  # Garante que todas as datas estejam presentes.
+  separate(Data, into = c("Ano", "Mes", "Dia"),           # Extrai componentes da data.
+           sep = "-", remove = FALSE) |>
+  filter(Ano >= 2007 & Ano <= 2024) |>                    # Mantém apenas os anos de interesse.
+  print()
+
+## full_join() insere datas ausentes com valores NA, preservando a estrutura da série.
+
+#------------------------------------------------------------------------------#
+# 4. Cálculo de Percentual de Dados Ausentes
+
+# Objetivo: 
+# - Avaliar a qualidade da série temporal.
+
+# Justificativa: 
+# - Alta ausência pode comprometer a confiabilidade das análises estatísticas.
+
+percentual_na <- function(x) {
+  total_na <- sum(is.na(x))       # Conta o número de valores ausentes.
+  total_n <- length(x)            # Conta o total de observações.
+  (total_na / total_n) * 100      # Calcula o percentual de ausência.
+}
+
+percentual_na(MACAE2$Prec)        # Aplica a função à variável de precipitação.
+
+
+#------------------------------------------------------------------------------#
+# 5. Identificação dos Máximos Anuais
+
+# Objetivo: 
+# - Extrair, para cada ano, o dia com o maior valor de precipitação registrado.
+
+# Justificativa: 
+# - Base para análise de extremos.
+
+prec_max_anual <- MACAE2 |>
+  group_by(Ano) |>                                 # Agrupa os dados por ano.
+  slice_max(order_by = Prec, n = 1, with_ties = FALSE) |>  # Seleciona o maior valor de precipitação por ano.
+  ungroup() |>                                     # Remove o agrupamento.
+  print()
+
+#------------------------------------------------------------------------------#
+# 6. Visualização dos Máximos
+
+# Objetivo: 
+# - Mostrar a série completa e destacar os máximos anuais.
+
+# Justificativa: 
+# - Facilita a identificação visual de eventos extremos.
+
+grafico_maximos <- ggplot(MACAE2, aes(x = Data, y = Prec)) +
+  geom_line(color = "#386e9f") +  # Linha representando a precipitação diária.
+  
+  geom_point(data = prec_max_anual, 
+             aes(x = Data, y = Prec), 
+             color = "#c81111", size = 2) +  # Pontos destacados nos máximos anuais.
+  
+  geom_label_repel(
+    data = prec_max_anual,
+    aes(label = paste0(round(Prec, 1), " mm\n(", format(Data, "%d-%m-%Y"), ")")),
+    size = 3, color = "#c81111", fill = "white", alpha = 0.7,
+    box.padding = 0.5, max.overlaps = Inf) +  # Rótulos com valor e data dos máximos.
+  
+  labs(title = "Máximos Anuais de Precipitação",
+       x = "Ano", y = "Precipitação (mm/dia)") +
+  
+  scale_x_date(
+    date_labels = "%Y",
+    breaks = seq(as.Date("2007-01-01"), as.Date("2024-12-30"), by = "1 year")) +
+  
+  scale_y_continuous(
+    breaks = seq(50, 200, by = 50), limits = c(0, 200)) +
+  
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold", hjust = 0)
+  )
+
+print(grafico_maximos)
+
+#------------------------------------------------------------------------------#
+# 7. Teste de Aleatoriedade
+
+# Objetivo: 
+# - Verificar se a sequência de máximos anuais de precipitação ocorre de forma 
+#   aleatória ao longo do tempo.
+
+# Justificativa: 
+# - Importante para validar pressupostos de modelagem.
+
+# Runs Test (ou teste das sequências):
+# - Hipótese nula (H₀): A sequência é aleatória.
+# - Hipótese alternativa (H₁): A sequência não é aleatória (há padrão ou dependência).
+
+runs.test(prec_max_anual$Prec)
+
+# - Critério de decisão:
+## Se p-value > 0,05 → não se rejeita H₀ → evidência de aleatoriedade.
+## Se p-value ≤ 0,05 → rejeita-se H₀ → indício de dependência ou padrão não aleatório.
+
+#------------------------------------------------------------------------------#
+# 8. Autocorrelação
+
+# Objetivo: 
+# - Avaliar a presença de dependência temporal entre os valores máximos anuais de precipitação.
+
+# Justificativa: 
+# - A autocorrelação pode indicar persistência ou recorrência de eventos extremos, 
+#   o que impacta diretamente a escolha e validação de modelos estatísticos.
+
+# Função de Autocorrelação (ACF):
+
+acf(prec_max_anual$Prec)
+
+## A função acf() gera um gráfico que mostra a correlação entre os valores da série 
+## em diferentes defasagens (lags).
+
+## Picos significativos em determinados lags podem indicar persistência temporal, 
+## sazonalidade ou estrutura de dependência.
+
+#------------------------------------------------------------------------------#
+# 9. Ajuste do Modelo GEV
+
+# Objetivo: 
+# - Ajustar a distribuição GEV aos máximos anuais de precipitação.
+
+# Justificativa: 
+# - O ajuste da GEV permite estimar níveis de retorno para diferentes períodos, 
+#   sendo fundamental na avaliação de riscos associados a eventos extremos.
+
+fitGEV <- fevd(prec_max_anual$Prec, 
+               type = "GEV", 
+               method = "MLE", 
+               units = "mm", 
+               time.units = "days")
+
+# Gráfico de Nível de Retorno (Return Level Plot): 
+# - Mostra a precipitação esperada para diferentes períodos de retorno.
+
+plot(fitGEV, type = "rl", col = "blue", ann = FALSE, ylim = c(0, 600))
+title(xlab = "Período de Retorno (anos)",
+      ylab = "Nível de Retorno (mm)")
+
+# QQ Plot (Quantile-Quantile Plot):
+# - Compara os quantis observados com os teóricos da distribuição GEV, 
+#   permitindo avaliar a qualidade do ajuste.
+
+plot(fitGEV, type = "qq", main = "", col = "red")
+
+#------------------------------------------------------------------------------#
+# 10. Estimativa dos Níveis de Retorno
+
+# Objetivo: 
+# - Estimar os valores máximos esperados de precipitação para diferentes períodos de retorno.
+
+# Exemplo: Qual a chuva esperada a cada 50 anos?
+
+return.level(fitGEV, do.ci = FALSE, 
+             return.period = c(2, 5, 10, 25, 50, 100))
+
+#------------------------------------------------------------------------------#
+# 11. Teste de Adequação do Modelo
+
+# Objetivo: 
+# - Verificar se o modelo GEV ajustado apresenta boa aderência aos dados observados.
+
+# Justificativa: 
+# - A validação estatística será realizada por meio do teste de Kolmogorov-Smirnov, 
+#   que compara a distribuição empírica com a distribuição teórica ajustada.
+
+# Extração dos parâmetros do modelo: 
+params <- fitGEV$results$par
+loc <- params["location"]
+scale <- params["scale"]
+shape <- params["shape"]
+
+# Definição da Função de Distribuição Acumulada GEV:
+pgev_custom <- function(x) {
+  pgev(x, loc = loc, scale = scale, shape = shape)}
+
+# Teste de Kolmogorov-Smirnov:
+ks_result <- ks.test(prec_max_anual$Prec, pgev_custom)
+print(ks_result)
+
+# - ks.test() compara a CDF empírica dos dados com a CDF teórica da GEV.
+# - pgev_custom representa a função acumulada da GEV com os parâmetros ajustados.
+
+## Hipótese nula (H₀): Os dados seguem a distribuição GEV.
+## Hipótese alternativa (H₁): Os dados não seguem a distribuição GEV.
+
+alpha <- 0.05
+if (ks_result$p.value <= alpha) {
+  cat("O ajuste do modelo GEV não é adequado aos dados com um nível de significância de 5%.\n")} else {
+    cat("✅ O ajuste do modelo GEV é adequado aos dados com um nível de significância de 5%.\n")}
+
+## Decisão: se o p-value for maior que 0,05, não se rejeita H₀, indicando boa 
+## aderência à GEV, a um nível de significância de 5%.
+
+#------------------------------------------------------------------------------#
+# Espera-se que este material contribua para a disseminação de boas práticas em 
+# análise estatística aplicada à climatologia, além de apoiar pesquisas futuras 
+# sobre recursos hídricos e eventos extremos.
+
+#------------------------https://linktr.ee/pexcca.lamet------------------------#
