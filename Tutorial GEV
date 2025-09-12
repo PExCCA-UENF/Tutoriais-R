@@ -59,15 +59,15 @@ for (p in pacotes) {
 
 url_dados <- 'https://raw.githubusercontent.com/PExCCA-UENF/Tutoriais-R/refs/heads/main/Dados/dados_A608_D_2006-09-21_2025-04-10.csv'
 
-MACAE <- readr::read_delim(url_dados, 
+MACAE <- read_delim(url_dados, 
                            skip = 10,           # Ignora as 10 primeiras linhas do arquivo.
                            na = 'null',         # Define 'null' como valor ausente.
                            delim = ';',         # Define ponto e vírgula como separador.
                            col_names = TRUE,
                            locale = locale(decimal_mark = ',') # Define vírgula como separador decimal.
 ) |> 
-  dplyr::select(!ends_with('3')) |>             # Remove coluna irrelevante que termina com '3'.
-  dplyr::rename(Data = `Data Medicao`,          # Renomeia colunas para facilitar a análise.
+  select(!ends_with('3')) |>             # Remove coluna irrelevante que termina com '3'.
+  rename(Data = `Data Medicao`,          # Renomeia colunas para facilitar a análise.
                 Prec = `PRECIPITACAO TOTAL, DIARIO (AUT)(mm)`) |> 
   print()
 
@@ -113,6 +113,7 @@ percentual_na <- function(x) {
 }
 
 percentual_na(MACAE2$Prec)        # Aplica a função à variável de precipitação.
+
 
 #------------------------------------------------------------------------------#
 # 5. Identificação dos Máximos Anuais
