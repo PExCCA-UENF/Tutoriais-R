@@ -2,7 +2,7 @@
 #    PESQUISA E EXTENSÃO UNIVERSITÁRIA EM CIÊNCIAS CLIMÁTICAS E AMBIENTAIS     #
 #     TUTORIAL: IDENTIFICAÇÃO E MODELAGEM DE PRECIPITAÇÕES MÁXIMAS COM R       #
 #      ELABORAÇÃO: LYNDA SHÉRYLLIN CABOCLO VIANA E ELIANE BARBOSA SANTOS       #
-#                          Atualizado em 11/09/2025                            #
+#                          Atualizado em 14/11/2025                            #
 #==============================================================================#
 
 # Este tutorial foi elaborado como produção técnica vinculada à dissertação    #
@@ -19,6 +19,11 @@
 # precipitação máxima diária, com foco na aplicação da distribuição Generalizada 
 # de Valores Extremos (GEV).
 
+# A GEV reúne três tipos clássicos de distribuições de extremos: Gumbel, Fréchet e Weibull.
+# - O parâmetro de forma (shape) da GEV define qual desses casos se aplica.
+# - Assim, a GEV é uma família flexível que descreve o comportamento de valores extremos,
+#   sendo amplamente usada em climatologia e hidrologia para modelar eventos raros.
+
 # A metodologia adotada envolve o processamento e análise de dados diários de 
 # precipitação da estação automática A608 do Instituto Nacional de Meteorologia (INMET).
 # As etapas incluem a identificação dos valores máximos anuais de precipitação e 
@@ -32,70 +37,99 @@
 # Objetivo: 
 # - Garantir que todos os pacotes necessários estejam instalados e carregados.
 
-# Pacotes necessários:
-# - tidyverse → manipulação, organização e visualização de dados.
-# - readr → importação de arquivos de texto.
-# - ggrepel → rótulos em gráficos.
-# - randtests → testes estatísticos de aleatoriedade.
-# - extRemes → modelagem estatística de valores extremos.
-# - TLMoments → cálculo de momentos-L.
+# Lista de pacotes necessários:
+pacotes <- c("tidyverse",    # Conjunto de pacotes para manipulação, organização e visualização de dados.
+             "readr",        # Leitura de arquivos.
+             "ggrepel",      # Melhor posicionamento de rótulos em gráficos ggplot2.
+             "randtests",    # Testes estatísticos para séries temporais.
+             "extRemes",     # Modelagem de eventos extremos.
+             "TLMoments")    # Momentos L-moment para análise estatística.
 
-pacotes <- c("tidyverse", "readr", "ggrepel", "randtests", 
-             "extRemes", "TLMoments")
-
+# Loop para verificar, instalar (se necessário) e carregar cada pacote:
 for (p in pacotes) {
+  # Verifica se o pacote está instalado e carregado.
   if (!require(p, character.only = TRUE)) {
-    install.packages(p, dependencies = TRUE)}
-  library(p, character.only = TRUE, quietly = TRUE)}
+    # Instala o pacote com todas as dependências.
+    install.packages(p, dependencies = TRUE)
+  }
+  # Carrega o pacote.
+  library(p, character.only = TRUE, quietly = TRUE)
+}
 
 #------------------------------------------------------------------------------#
 # 2. Importação dos Dados
-# -  A segunda etapa consiste na importação do conjunto de dados que servirá de 
-#    base para as análises propostas.
+# -  Nesta etapa, realiza-se a importação do conjunto de dados que servirá como
+#    base para as análises a serem desenvolvidas.
 
 # Fonte dos dados: 
 # - Os dados diários de precipitação foram obtidos do Banco de Dados Meteorológicos 
 #   do INMET. O arquivo está disponível no repositório do PExCCA-UENF no GitHub.
 
+# Definir a URL do arquivo no GitHub:
 url_dados <- 'https://raw.githubusercontent.com/PExCCA-UENF/Tutoriais-R/refs/heads/main/Dados/dados_A608_D_2006-09-21_2025-04-10.csv'
 
+# Ler o arquivo delimitado:
+# - skip = 10: ignora as 10 primeiras linhas (geralmente cabeçalho descritivo).
+# - na = "null": define a string "null" como valor ausente (NA).
+# - delim = ";": usa ponto e vírgula como separador de campos.
+# - col_names = TRUE: utiliza os nomes das colunas presentes no arquivo.
+# - locale(decimal_mark = ","): informa que o separador decimal é vírgula.
+
 MACAE <- read_delim(url_dados, 
-                           skip = 10,           # Ignora as 10 primeiras linhas do arquivo.
-                           na = 'null',         # Define 'null' como valor ausente.
-                           delim = ';',         # Define ponto e vírgula como separador.
-                           col_names = TRUE,
-                           locale = locale(decimal_mark = ',') # Define vírgula como separador decimal.
+                    skip = 10,           
+                    na = 'null',         
+                    delim = ';',         
+                    col_names = TRUE,
+                    locale = locale(decimal_mark = ',') 
 ) |> 
-  select(!ends_with('3')) |>             # Remove coluna irrelevante que termina com '3'.
-  rename(Data = `Data Medicao`,          # Renomeia colunas para facilitar a análise.
-                Prec = `PRECIPITACAO TOTAL, DIARIO (AUT)(mm)`) |> 
-  print()
+  # Selecionar e renomear colunas relevantes.
+  # - select(!ends_with("3")): remove qualquer coluna cujo nome termine em "3"
+  # - rename(): renomeia nomes para facilitar análise.
+  select(!ends_with('3')) |>             
+  rename(Data = `Data Medicao`,         
+         Prec = `PRECIPITACAO TOTAL, DIARIO (AUT)(mm)`) 
+
+# Variável: PRECIPITACAO TOTAL, DIARIO (AUT)(mm)
+# - Total de chuva acumulada em 24h
+# - Medida por estação automática do INMET
+# - Unidade: milímetros (mm)
+
+# Conferência rápida dos dados:
+# - print(): exibe o tibble no console para verificação.
+# - glimpse(): mostra tipos de colunas e amostras.
+print(MACAE)
+glimpse(MACAE)
 
 #------------------------------------------------------------------------------#
 # 3. Criação de Referência Temporal Completa e Preenchimento de Lacunas
 
 # Objetivo: 
-# - Criar uma sequência contínua de datas para garantir a integridade da série temporal, 
-#   preenchendo eventuais lacunas nos registros diários.
+# - Criar uma sequência contínua de datas para garantir a integridade da série temporal. 
+# - Preencher eventuais lacunas nos registros originais com valores ausentes (NA).
 
 # Criação da referência temporal:
+# - Gera uma sequência diária entre a menor e a maior data disponível no conjunto MACAE.
+
 Data.ref <- seq.Date(
   from = min(MACAE$Data),
   to = max(MACAE$Data),
   by = "day")
 
-# Gera uma sequência diária de datas entre o menor e o maior valor presente na 
-# variável Data do conjunto original MACAE.
-
 # Preenchimento de lacunas e filtragem temporal:
-MACAE2 <- MACAE |>
-  full_join(data.frame(Data = Data.ref), by = "Data") |>  # Garante que todas as datas estejam presentes.
-  separate(Data, into = c("Ano", "Mes", "Dia"),           # Extrai componentes da data.
+MACAE2 <- MACAE |> 
+  # full_join: garante que todas as datas da referência estejam presentes.
+  # Se alguma data não existir no conjunto original, será criada com valores NA.
+  full_join(data.frame(Data = Data.ref), by = "Data") |>
+  
+  # separate: decompõe a coluna Data em Ano, Mês e Dia.
+  separate(Data, into = c("Ano", "Mes", "Dia"),
            sep = "-", remove = FALSE) |>
-  filter(Ano >= 2007 & Ano <= 2024) |>                    # Mantém apenas os anos de interesse.
-  print()
+  
+  # filter: filtrar apenas os anos de interesse (2007 a 2024).
+  filter(Ano >= 2007 & Ano <= 2024)
 
-## full_join() insere datas ausentes com valores NA, preservando a estrutura da série.
+# Conferência dos dados resultantes:
+print(MACAE2)
 
 #------------------------------------------------------------------------------#
 # 4. Cálculo de Percentual de Dados Ausentes
@@ -106,14 +140,16 @@ MACAE2 <- MACAE |>
 # Justificativa: 
 # - Alta ausência pode comprometer a confiabilidade das análises estatísticas.
 
+# Função para calcular o percentual de valores ausentes em um vetor
 percentual_na <- function(x) {
-  total_na <- sum(is.na(x))       # Conta o número de valores ausentes.
-  total_n <- length(x)            # Conta o total de observações.
-  (total_na / total_n) * 100      # Calcula o percentual de ausência.
+  total_na <- sum(is.na(x))               # Número de valores ausentes (NA).
+  total_n  <- length(x)                   # Número total de observações.
+  perc     <- (total_na / total_n) * 100  # Percentual de ausência.
+  return(perc)                            # Retorna o valor calculado.
 }
 
-percentual_na(MACAE2$Prec)        # Aplica a função à variável de precipitação.
-
+# Aplicação da função à variável de precipitação:
+percentual_na(MACAE2$Prec)
 
 #------------------------------------------------------------------------------#
 # 5. Identificação e Visualização dos Máximos Anuais
@@ -121,69 +157,106 @@ percentual_na(MACAE2$Prec)        # Aplica a função à variável de precipita�
 # Objetivo: 
 # - Extrair, para cada ano, o dia com o maior valor de precipitação registrado.
 
-# Justificativa: 
-# - Base para análise de extremos.
+# Justificativa:
+# - Essa etapa fornece a base para análises de extremos climáticos, permitindo 
+#   identificar eventos de maior impacto em cada ano.
 
+# Identificação dos máximos anuais:
 prec_max_anual <- MACAE2 |>
   group_by(Ano) |>                                         # Agrupa os dados por ano.
   slice_max(order_by = Prec, n = 1, with_ties = FALSE) |>  # Seleciona o maior valor de precipitação por ano.
-  ungroup() |>                                             # Remove o agrupamento.
-  print()
+  ungroup()                                                # Remove o agrupamento para evitar efeitos posteriores.
 
-# Visualização dos Máximos:
-# - Mostrar a série completa e destacar os máximos anuais.
+# Observação:
+# - slice_max():
+#   -> n = 1: seleciona apenas um valor por ano.
+#   -> with_ties = FALSE: em caso de empate, mantém apenas o primeiro.
 
+# Exibição dos resultados:
+print(prec_max_anual)
+
+# Visualização dos máximos anuais:
+
+# - Gráfico de barras mostrando o valor máximo de precipitação por ano.
+ggplot(prec_max_anual, aes(x = Ano, y = Prec)) +
+  geom_col(fill = "steelblue") +
+  geom_text(aes(label = round(Prec, 1)),   # Adiciona rótulos com valores arredondados.
+            vjust = -0.5,                  # Ajusta posição vertical acima da barra.
+            size = 3.5,                    # Tamanho da fonte.
+            color = "black") +             # Cor do texto.
+  labs(title = "Máximos Anuais de Precipitação",
+       x = "Ano",
+       y = "Precipitação Máxima (mm)") +
+  theme_minimal()
+
+# - Série Completa de Precipitação Diária com Destaque dos Máximos Anuais:
 ggplot(MACAE2, aes(x = Data, y = Prec)) +
-  geom_line(color = "#386e9f") +  # Linha representando a precipitação diária.
   
+  # Série temporal completa (linha azul):
+  geom_line(color = "#386e9f", linewidth = 0.6) +
+  
+  # Máximos anuais destacados (pontos vermelhos):
   geom_point(data = prec_max_anual, 
              aes(x = Data, y = Prec), 
-             color = "#c81111", size = 2) +  # Pontos destacados nos máximos anuais.
+             color = "#c81111", size = 2.5) +
   
+  # Rótulos com valor e data dos máximos:
   geom_label_repel(
     data = prec_max_anual,
-    aes(label = paste0(round(Prec, 1), " mm\n(", format(Data, "%d-%m-%Y"), ")")),
-    size = 3, color = "#c81111", fill = "white", alpha = 0.7,
-    box.padding = 0.5, max.overlaps = Inf) +  # Rótulos com valor e data dos máximos.
+    aes(label = paste0(round(Prec, 1), " mm\n", format(Data, "%d/%m/%Y"))),
+    size = 3, color = "#c81111", fill = "white", alpha = 0.8,
+    box.padding = 0.5, max.overlaps = Inf,
+    segment.color = "#c81111", segment.size = 0.3) +
   
+  # Títulos e eixos:
   labs(title = "Máximos Anuais de Precipitação",
-       x = "Ano", y = "Precipitação (mm/dia)") +
+       subtitle = "Série diária com destaque para os maiores valores por ano",
+       x = "Ano", 
+       y = "Precipitação (mm/dia)") +
   
+  # Escala temporal (anos no eixo X):
   scale_x_date(
     date_labels = "%Y",
-    breaks = seq(as.Date("2007-01-01"), as.Date("2024-12-30"), by = "1 year")) +
+    breaks = seq(as.Date("2007-01-01"), as.Date("2024-12-31"), by = "1 year")) +
   
+  # Escala de precipitação (eixo Y):
   scale_y_continuous(
-    breaks = seq(50, 200, by = 50), limits = c(0, 200)) +
+    breaks = seq(0, 200, by = 50), limits = c(0, 200)) +
   
-  theme_minimal() +
+  # Tema visual:
+  theme_minimal(base_size = 12) +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(face = "bold", hjust = 0)
+    axis.text.x   = element_text(angle = 45, hjust = 1),
+    plot.title    = element_text(face = "bold", hjust = 0),
+    plot.subtitle = element_text(size = 10, hjust = 0, color = "gray30")
   )
 
 #------------------------------------------------------------------------------#
-# 6. Teste de Aleatoriedade
+# 6. Teste de Aleatoriedade (Runs Test)
 
 # Objetivo: 
 # - Verificar se a sequência de máximos anuais de precipitação ocorre de forma 
 #   aleatória ao longo do tempo.
 
 # Justificativa: 
-# - Importante para validar pressupostos de modelagem.
+# - A aleatoriedade é um pressuposto importante em diversas técnicas de modelagem estatística.
 
-# Runs Test (ou teste das sequências):
-# - Hipótese nula (H₀): A sequência é aleatória.
-# - Hipótese alternativa (H₁): A sequência não é aleatória (há padrão ou dependência).
+# Hipóteses do teste:
+# - H0: A sequência é aleatória.
+# - H1: A sequência não é aleatória (há padrão ou dependência).
 
-runs.test(prec_max_anual$Prec)
+# Aplicação do Runs Test:
+resultado_runs <- runs.test(prec_max_anual$Prec)
 
-# - Critério de decisão:
-## Se p-value > 0,05 → não se rejeita H₀ → evidência de aleatoriedade.
-## Se p-value ≤ 0,05 → rejeita-se H₀ → indício de dependência ou padrão não aleatório.
+# Exibição do resultado:
+print(resultado_runs)
+
+# Critério de decisão:
+# - Se p-value > 0,05 → não se rejeita H0 → evidência de aleatoriedade.
+# - Se p-value ≤ 0,05 → rejeita-se H0 → indício de dependência ou padrão não aleatório.
 
 #------------------------------------------------------------------------------#
-# 7. Autocorrelação
+# 7. Autocorrelação (ACF)
 
 # Objetivo: 
 # - Avaliar a presença de dependência temporal entre os valores máximos anuais de precipitação.
@@ -193,14 +266,16 @@ runs.test(prec_max_anual$Prec)
 #   o que impacta diretamente a escolha e validação de modelos estatísticos.
 
 # Função de Autocorrelação (ACF):
+acf(prec_max_anual$Prec,
+    main = "Função de Autocorrelação dos Máximos Anuais",
+    xlab = "Defasagem (lag)",
+    ylab = "Autocorrelação",
+    col  = "#386e9f", lwd = 2)
 
-acf(prec_max_anual$Prec)
-
-## A função acf() gera um gráfico que mostra a correlação entre os valores da série 
-## em diferentes defasagens (lags).
-
-## Picos significativos em determinados lags podem indicar persistência temporal, 
-## sazonalidade ou estrutura de dependência.
+# Interpretação:
+# - O gráfico mostra a correlação entre os valores da série em diferentes defasagens (lags).
+# - Picos significativos em determinados lags podem indicar:
+#   -> Persistência temporal (dependência entre anos consecutivos).
 
 #------------------------------------------------------------------------------#
 # 8. Ajuste do Modelo GEV
@@ -212,11 +287,12 @@ acf(prec_max_anual$Prec)
 # - O ajuste da GEV permite estimar níveis de retorno para diferentes períodos, 
 #   sendo fundamental na avaliação de riscos associados a eventos extremos.
 
-fitGEV <- fevd(prec_max_anual$Prec, 
-               type = "GEV", 
-               method = "MLE", 
-               units = "mm", 
-               time.units = "days")
+# Ajuste do modelo GEV usando Máxima Verossimilhança (MLE):
+fitGEV <- fevd(prec_max_anual$Prec,
+               type       = "GEV",   # Distribuição escolhida: Generalized Extreme Value.
+               method     = "MLE",   # Método de estimação: Máxima Verossimilhança.
+               units      = "mm",    # Unidade de medida da variável.
+               time.units = "days")  # Unidade temporal associada.
 
 # Gráfico de Nível de Retorno (Return Level Plot): 
 # - Mostra a precipitação esperada para diferentes períodos de retorno.
@@ -239,8 +315,12 @@ plot(fitGEV, type = "qq", main = "", col = "red")
 
 # Exemplo: Qual a chuva esperada a cada 50 anos?
 
-return.level(fitGEV, do.ci = FALSE, 
-             return.period = c(2, 5, 10, 25, 50, 100))
+niv_ret <- return.level(fitGEV,
+                        do.ci = FALSE,                # Não calcula intervalo de confiança.
+                        return.period = c(2, 5, 10, 25, 50, 100))
+
+# Exibição dos resultados:
+print(niv_ret)
 
 #------------------------------------------------------------------------------#
 # 10. Teste de Adequação do Modelo
@@ -252,33 +332,46 @@ return.level(fitGEV, do.ci = FALSE,
 # - A validação estatística será realizada por meio do teste de Kolmogorov-Smirnov, 
 #   que compara a distribuição empírica com a distribuição teórica ajustada.
 
-# Extração dos parâmetros do modelo: 
+# Extração dos parâmetros estimados do modelo GEV:
 params <- fitGEV$results$par
-loc <- params["location"]
-scale <- params["scale"]
-shape <- params["shape"]
+loc   <- params["location"]  # Parâmetro de localização.
+scale <- params["scale"]     # Parâmetro de escala.
+shape <- params["shape"]     # Parâmetro de forma.
+
+# O parâmetro de forma (shape) da GEV define qual o tipo de distribuição de extremos: 
+# Gumbel, Fréchet e Weibull. #
+# - parâmetro de forma (shape) = 0 → Distribuição de Gumbel 
+# - parâmetro de forma (shape) > 0 → Distribuição de Fréchet 
+# - parâmetro de forma (shape) < 0 → Distribuição de Weibull
 
 # Definição da Função de Distribuição Acumulada GEV:
 pgev_custom <- function(x) {
   pgev(x, loc = loc, scale = scale, shape = shape)}
 
 # Teste de Kolmogorov-Smirnov:
+# - Hipóteses:
+#   H0: Os dados seguem a distribuição GEV.
+#   H1: Os dados não seguem a distribuição GEV.
 ks_result <- ks.test(prec_max_anual$Prec, pgev_custom)
+
+# Exibição do resultado completo:
 print(ks_result)
 
-# - ks.test() compara a CDF empírica dos dados com a CDF teórica da GEV.
-# - pgev_custom representa a função acumulada da GEV com os parâmetros ajustados.
-
-## Hipótese nula (H₀): Os dados seguem a distribuição GEV.
-## Hipótese alternativa (H₁): Os dados não seguem a distribuição GEV.
-
+# Decisão com nível de significância de 5%:
 alpha <- 0.05
 if (ks_result$p.value <= alpha) {
-  cat("O ajuste do modelo GEV não é adequado aos dados com um nível de significância de 5%.\n")} else {
-    cat("✅ O ajuste do modelo GEV é adequado aos dados com um nível de significância de 5%.\n")}
+  cat("❌ O ajuste do modelo GEV NÃO é adequado aos dados (p-value =", 
+      round(ks_result$p.value, 4), ").\n")
+} else {
+  cat("✅ O ajuste do modelo GEV é adequado aos dados (p-value =", 
+      round(ks_result$p.value, 4), ").\n")
+}
 
-## Decisão: se o p-value for maior que 0,05, não se rejeita H₀, indicando boa 
-## aderência à GEV, a um nível de significância de 5%.
+# Observações:
+# - ks.test() compara a CDF empírica dos dados com a CDF teórica da GEV.
+# - pgev_custom representa a função acumulada da GEV com os parâmetros ajustados.
+# - Se p-value > 0,05 → não se rejeita H0 → evidência de boa aderência.
+# - Se p-value ≤ 0,05 → rejeita-se H0 → indício de inadequação do ajuste.
 
 #------------------------------------------------------------------------------#
 # Espera-se que este material contribua para a disseminação de boas práticas em 
