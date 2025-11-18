@@ -246,7 +246,7 @@ ggplot(MACAE2, aes(x = Data, y = Prec)) +
 # - H1: A sequência não é aleatória (há padrão ou dependência).
 
 # Aplicação do Runs Test:
-resultado_runs <- runs.test(prec_max_anual$Prec)
+resultado_runs <- randtests::runs.test(prec_max_anual$Prec)
 
 # Exibição do resultado:
 print(resultado_runs)
